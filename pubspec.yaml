@@ -1,0 +1,22 @@
+name: hydrated_kit
+description: >-
+  hydrated_bloc for DartNative: persisted Bloc and Cubit state with the
+  storage directory resolved by dartnative_path_provider, one call to set up.
+version: 0.1.0
+repository: https://github.com/edkluivert/hydrated_kit
+topics:
+  - dartnative
+  - bloc
+  - persistence
+
+environment:
+  sdk: ^3.11.0
+
+# `dn pub get` resolves dartnative_path_provider from the installed SDK.
+dependencies:
+  dartnative_path_provider: ^1.0.0
+  hydrated_bloc: ^11.0.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.32.0
