@@ -25,7 +25,9 @@ Future<void> main() async {
   );
   // One call: builds the Hive-backed storage in the app-support directory
   // and installs it as HydratedBloc.storage.
-  await initHydratedStorage();
+  await initHydratedStorage(
+
+  );
   runApp(const HydratedExampleApp());
 }
 
