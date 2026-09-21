@@ -34,7 +34,7 @@ await initHydratedStorage();
 
 ```yaml
 dependencies:
-  hydrated_kit: ^0.1.0
+  hydrated_kit: ^0.1.1
   dartnative_path_provider: ^1.0.0
 ```
 
