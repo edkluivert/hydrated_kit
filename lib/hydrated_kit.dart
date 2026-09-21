@@ -30,12 +30,16 @@
 ///
 /// `HydratedBloc`, `HydratedCubit`, `HydratedMixin`, `HydratedStorage`,
 /// `HydratedAesCipher` and `package:bloc` come from the re-export.
+///
+/// Mix in [VersionedHydration] to store a schema version with the state and
+/// get a `migrate(from, json)` hook when the shape changes between releases.
 library;
 
 import 'package:dartnative_path_provider/dartnative_path_provider.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
 
 export 'package:hydrated_bloc/hydrated_bloc.dart';
+export 'src/versioned_hydration.dart';
 
 /// Where on the device the hydrated Hive box is kept.
 enum HydratedStorageLocation {

@@ -53,7 +53,11 @@ class NotesState {
   final List<String> notes;
 }
 
-class NotesBloc extends HydratedBloc<NotesEvent, NotesState> {
+/// Versioned: notes were first persisted as `{'notes': [...]}` with no
+/// version at all, so a 0.1.x install migrates from version 0 the first time
+/// this build runs, then writes `{'notes': [...], '__schemaVersion': 1}`.
+class NotesBloc extends HydratedBloc<NotesEvent, NotesState>
+    with VersionedHydration<NotesState> {
   NotesBloc() : super(const NotesState([])) {
     on<NoteAdded>((event, emit) {
       emit(NotesState([...state.notes, event.text]));
@@ -66,12 +70,20 @@ class NotesBloc extends HydratedBloc<NotesEvent, NotesState> {
   }
 
   @override
-  NotesState? fromJson(Map<String, dynamic> json) {
+  int get schemaVersion => 1;
+
+  @override
+  Map<String, dynamic>? migrate(int from, Map<String, dynamic> json) =>
+      json; // the unversioned blob already has the version-1 shape
+
+  @override
+  NotesState? fromCurrentJson(Map<String, dynamic> json) {
     final notes = json['notes'];
     if (notes is! List) return null;
     return NotesState(notes.cast<String>());
   }
 
   @override
-  Map<String, dynamic>? toJson(NotesState state) => {'notes': state.notes};
+  Map<String, dynamic>? toCurrentJson(NotesState state) =>
+      {'notes': state.notes};
 }

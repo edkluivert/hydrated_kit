@@ -2,7 +2,8 @@
 
 [hydrated_bloc](https://pub.dev/packages/hydrated_bloc) for
 [DartNative](https://dartnative.com): persisted `Bloc` and `Cubit` state, set
-up in one call.
+up in one call, with a schema version and a `migrate` hook for when the
+stored shape changes between releases.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/edkluivert/hydrated_kit/main/doc/demo.gif" width="360" alt="hydrated_kit example: the counter is tapped and two notes added, the app is killed and reopened, and launch #2 shows the counter and notes back from disk" />
@@ -34,7 +35,7 @@ await initHydratedStorage();
 
 ```yaml
 dependencies:
-  hydrated_kit: ^0.1.1
+  hydrated_kit: ^0.2.0
   dartnative_path_provider: ^1.0.0
 ```
 
@@ -91,6 +92,78 @@ The default is the app-support directory: not user-visible, not purged.
 hydrated_bloc's Flutter README uses the temporary directory, where iOS may
 delete the box between launches.
 
+### Schema versions
+
+Stored state outlives the code that wrote it. Mix `VersionedHydration` into
+a `HydratedCubit` or `HydratedBloc` to persist a schema version next to the
+state and get a `migrate` hook when a build reads state written by an older
+one:
+
+```dart
+class SettingsCubit extends HydratedCubit<Settings>
+    with VersionedHydration<Settings> {
+  SettingsCubit() : super(Settings.defaults);
+
+  @override
+  int get schemaVersion => 3;
+
+  @override
+  Map<String, dynamic>? migrate(int from, Map<String, dynamic> json) {
+    var out = json;
+    // v1 stored a bare theme string; v2 nested it under `appearance`.
+    if (from < 2) out = {...out, 'appearance': {'theme': out['theme']}};
+    // v3 renamed `appearance` to `display`.
+    if (from < 3) out = {...out, 'display': out['appearance']};
+    return out;
+  }
+
+  @override
+  Settings? fromCurrentJson(Map<String, dynamic> json) => Settings.fromJson(json);
+
+  @override
+  Map<String, dynamic>? toCurrentJson(Settings state) => state.toJson();
+}
+```
+
+`fromCurrentJson` and `toCurrentJson` replace `fromJson` and `toJson`; the
+mixin implements those two (marked `@nonVirtual`, so overriding them is an
+analyzer warning) to add and strip the version. `schemaVersion` starts at
+`1` and goes up by one whenever the shape from `toCurrentJson` changes;
+`0` means state stored before the mixin was adopted. What happens on
+hydration depends on the stored version:
+
+| Stored version              | Result                                                        |
+| --------------------------- | ------------------------------------------------------------- |
+| equal to `schemaVersion`    | `fromCurrentJson(json)`                                       |
+| behind                      | `migrate(from, json)` once, then `fromCurrentJson` on the result |
+| none (pre-versioning state) | `migrate(0, json)`, so a shipped app adopts this without losing state |
+| ahead (app was rolled back) | `HydratedSchemaDowngrade` is thrown into `onHydrationError`   |
+
+`migrate` is called once with the stored version and the stored map, with
+the version key already removed, and returns the map in the current shape.
+It is not stepped one version at a time: the `if (from < n)` chain above is
+how a single call walks a blob forward from any older version. Returning
+`null` discards the old state and starts from the initial state, which is
+also the default when `migrate` is not overridden. A migrated state is
+written back in the new shape as soon as the bloc hydrates, so the
+migration runs once per install, not on every launch.
+
+The version is stored under `__schemaVersion` in the same map as the state.
+Override `schemaVersionKey` only if the state already uses that name.
+
+A downgrade goes through hydrated_bloc's normal error path: the default
+`HydrationErrorBehavior.overwrite` starts fresh and replaces the newer blob
+on the next emit; return `HydrationErrorBehavior.retain` from
+`onHydrationError` to keep it on disk until the app is upgraded again.
+
+For a hard reset instead of a migration, change `storagePrefix` or `id`:
+the old entry is orphaned and the bloc starts clean.
+
+Migrations are plain functions, so test them by calling `migrate` with a
+map in the old shape, or hydrate through an in-memory `Storage` seeded with
+an old blob and assert on `state`; `test/versioned_hydration_test.dart` in
+the repository does both.
+
 ### Encryption
 
 ```dart
@@ -106,6 +179,9 @@ await initHydratedStorage(encryptionCipher: HydratedAesCipher(key));
   `HydratedStorage` there without installing it.
 - `initHydratedStorage({location, encryptionCipher})` builds it and sets
   `HydratedBloc.storage`. Returns the storage for `clear()` or `close()`.
+- `VersionedHydration<State>` stores a `schemaVersion` with the state and
+  calls `migrate(from, json)` when the stored version is behind;
+  `HydratedSchemaDowngrade` when it is ahead.
 
 ## Other storage backends
 
@@ -294,7 +370,9 @@ class HiveBoxStorage implements Storage {
 ## Example
 
 `example/` is a launch counter, a counter and a notes list that all come back
-after the app is killed and reopened, plus a button that clears the box. It
+after the app is killed and reopened, plus a button that clears the box. The
+notes bloc uses `VersionedHydration`: notes saved by the 0.1.x example have
+no version and migrate from `0` the first time the current build runs. It
 uses [flutterbloc_kit](https://dartpub.dev/packages/flutterbloc_kit) for the
 widgets.
 
